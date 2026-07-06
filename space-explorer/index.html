@@ -90,6 +90,26 @@
     color:#CFE3FF; font-size:13px; padding:6px 14px; pointer-events:none; }
   #schedule b { color:#FFD75E; }
 
+  /* ☄️ comet chase */
+  #cometHud { position:fixed; top:104px; left:50%; transform:translateX(-50%); z-index:23;
+    background:rgba(6,10,26,.96); border:2px solid rgba(160,215,255,.7); border-radius:999px;
+    color:#DDF1FF; font-size:16px; font-weight:bold; padding:7px 18px; pointer-events:none;
+    text-align:center; box-shadow:0 0 20px rgba(140,200,255,.45); white-space:nowrap;
+    animation:cometPulse 1s ease-in-out infinite; }
+  @keyframes cometPulse { 0%,100%{ box-shadow:0 0 16px rgba(140,200,255,.35); }
+    50%{ box-shadow:0 0 30px rgba(140,200,255,.7); } }
+  #cometArrow { position:fixed; left:50%; top:50%; z-index:22; font-size:34px; color:#BFE4FF;
+    text-shadow:0 0 14px rgba(140,200,255,.9); pointer-events:none; opacity:0;
+    transition:opacity .25s; }
+
+  /* 📷 photo mode: hide chrome for a clean shot */
+  #photoHint { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); z-index:60;
+    background:rgba(7,11,31,.72); border:2px solid rgba(255,215,94,.55); border-radius:999px;
+    color:#FFE9A8; font-size:15px; font-weight:bold; padding:8px 20px; pointer-events:none; }
+  body.photo #hud, body.photo #joyZone, body.photo #accelBtn, body.photo #landBtn,
+  body.photo #passport, body.photo #navHint, body.photo #schedule, body.photo #streak,
+  body.photo #cometHud, body.photo #cometArrow, body.photo .plabel { display:none !important; }
+
   #streak { position:fixed; top:14%; right:12px; z-index:22; font-size:22px; font-weight:bold;
     color:#FF9B4A; text-shadow:0 0 14px rgba(255,155,74,.7); pointer-events:none;
     transform:scale(0); transition:transform .3s cubic-bezier(.2,.9,.3,1.4); }
@@ -236,12 +256,16 @@
     <button class="iconBtn" id="missionsBtn" title="Daily missions">📋</button>
     <button class="iconBtn" id="shopBtn" title="Sparkle shop">🛍️</button>
     <button class="iconBtn" id="arcadeBtn" title="Mini games">🕹️</button>
+    <button class="iconBtn" id="photoBtn" title="Photo mode">📷</button>
     <button class="iconBtn" id="badgesBtn" title="Badges">🎖️</button>
     <button class="iconBtn" id="settingsBtn" title="Settings">⚙️</button>
   </div>
 </div>
 <div id="passport" class="hidden"></div>
 <div id="navHint" class="hidden"></div>
+<div id="cometHud" class="hidden"></div>
+<div id="cometArrow">➤</div>
+<div id="photoHint" class="hidden">📷 Photo mode — tap anywhere to return</div>
 <div id="schedule" class="hidden">1 Fly 🛸 → 2 Land 🛬 → 3 Answer ❓ → 4 Star ⭐</div>
 <div id="streak"></div>
 
@@ -843,6 +867,10 @@ const TEX={
   luna:{base:'#cfcfcf',craters:55},
   pluto:{base:'#C9B8A6',craters:30,blobs:[{c:'rgba(255,250,240,.6)',n:4,r:50}]}
 };
+/* atmosphere halo tints (rgba prefix, alpha appended per-planet) */
+const ATMO={mercury:'rgba(205,185,155,',venus:'rgba(255,220,150,',earth:'rgba(120,195,255,',
+  mars:'rgba(255,140,90,',jupiter:'rgba(235,205,155,',saturn:'rgba(240,225,180,',
+  uranus:'rgba(170,240,245,',neptune:'rgba(120,150,255,'};
 
 /* build stops */
 function buildStationMesh(){
@@ -898,6 +926,11 @@ STOPS.forEach((d,idx)=>{
   } else {
     mesh=new THREE.Mesh(new THREE.SphereGeometry(d.size,40,40),
       new THREE.MeshStandardMaterial({map:planetTexture(TEX[d.id]),roughness:.9}));
+    /* soft atmosphere halo — a backlit rim glow for depth */
+    const ac=ATMO[d.id]||'rgba(150,190,255,';
+    const atmo=new THREE.Sprite(new THREE.SpriteMaterial({
+      map:glowTexture(ac+'.42)',ac+'0)'),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+    const asz=(d.size||3)*3.2;atmo.scale.set(asz,asz,1);mesh.add(atmo);
   }
   group.add(mesh);mesh.position.x=d.dist;
   if(d.id==='saturn'){
@@ -994,6 +1027,7 @@ function buildSaucer(){
 }
 
 const flight={vel:0,maxV:24};
+let photoMode=false;
 let accelHeld=false,autopilot=-1,uiLock=true,started=false;
 const joy={x:0,y:0,active:false};
 
@@ -1023,6 +1057,61 @@ function explodeAt(p){
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:boomTex,transparent:true,depthWrite:false}));
   sp.position.copy(p);sp.scale.set(2,2,1);scene.add(sp);
   booms.push({sp,t:0});sndBoom();
+}
+const starTex=glowTexture('rgba(255,232,150,1)','rgba(255,180,60,.3)');
+function starShower(p){
+  for(let i=0;i<7;i++){
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:starTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+    sp.position.copy(p).add(new THREE.Vector3((Math.random()-.5)*12,(Math.random()-.5)*12,(Math.random()-.5)*12));
+    sp.scale.set(2,2,1);scene.add(sp);booms.push({sp,t:Math.random()*.12});
+  }
+  tone(880,0,.14,'sine');tone(1180,.1,.16,'sine');tone(1480,.22,.2,'sine');
+}
+
+/* ☄️ Comet Chase — a bonus comet streaks past; intercept it in flight for a star shower */
+const cometHead=new THREE.Mesh(new THREE.SphereGeometry(2.1,20,20),
+  new THREE.MeshStandardMaterial({color:0xEAF6FF,emissive:0x8CCBFF,emissiveIntensity:1,roughness:.4}));
+const cometGlow=new THREE.Sprite(new THREE.SpriteMaterial({
+  map:glowTexture('rgba(200,235,255,.95)','rgba(120,180,255,.15)'),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+cometGlow.scale.set(12,12,1);
+const cometTail=new THREE.Sprite(new THREE.SpriteMaterial({
+  map:glowTexture('rgba(180,225,255,.85)','rgba(90,150,255,0)'),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+cometTail.scale.set(30,11,1);
+[cometHead,cometGlow,cometTail].forEach(o=>{o.visible=false;scene.add(o);});
+const chaseComet={active:false,t:0,life:0,next:0,caught:false,
+  from:new THREE.Vector3(),to:new THREE.Vector3(),mdir:new THREE.Vector3()};
+const _cdir=new THREE.Vector3(),_crel=new THREE.Vector3();
+function setCometVisible(v){cometHead.visible=cometGlow.visible=cometTail.visible=v;}
+function spawnCometChase(now){
+  chaseComet.active=true;chaseComet.caught=false;chaseComet.t=0;
+  chaseComet.life=S.calm?20:15;
+  /* sweep the flight path past the ship's current spot so it's always catchable */
+  _cdir.set(Math.cos(now*1.7+1),(Math.random()-.5)*.5,Math.sin(now*2.3)).normalize();
+  chaseComet.from.copy(shipRoot.position).addScaledVector(_cdir,340);
+  chaseComet.to.copy(shipRoot.position).addScaledVector(_cdir,-340);
+  chaseComet.mdir.copy(chaseComet.to).sub(chaseComet.from).normalize();
+  cometHead.position.copy(chaseComet.from);
+  setCometVisible(true);
+  $('cometHud').classList.remove('hidden');
+  tone(1320,0,.14,'sine');tone(1640,.12,.16,'sine');
+  speak(S.calm?'A comet is drifting by. Fly to it if you like.'
+             :'A shiny comet! Chase it and catch it for bonus stars!');
+}
+function despawnComet(cool){
+  chaseComet.active=false;setCometVisible(false);
+  $('cometHud').classList.add('hidden');
+  const ar=$('cometArrow');if(ar)ar.style.opacity=0;
+  chaseComet.next=clock.elapsedTime+cool;
+}
+function catchComet(){
+  chaseComet.caught=true;
+  starShower(cometHead.position);explodeAt(cometHead.position);
+  despawnComet(S.calm?85:60);
+  S.stars+=2;streakN++;S.sparks=(S.sparks||0)+5;
+  refreshHUD();saveP();confetti();missionBump('sparks');
+  showToast('☄️ Comet caught! +2 ⭐ +5 ✨');
+  speak(S.calm?'You caught the comet. Two stars for you.'
+             :'Wow! You caught the comet! Two bonus stars and a sparkle shower!');
 }
 
 /* =====================================================
@@ -1510,6 +1599,16 @@ $('resetBtn').onclick=()=>{
 };
 $('settingsBtn').onclick=()=>{$('settings').classList.remove('hidden');};
 $('settingsClose').onclick=()=>{$('settings').classList.add('hidden');};
+/* 📷 photo mode — hide the HUD for a clean planet close-up; tap anywhere to return */
+function exitPhoto(){ if(!photoMode)return; photoMode=false;
+  document.body.classList.remove('photo');$('photoHint').classList.add('hidden');tone(660,0,.1); }
+$('photoBtn').onclick=()=>{
+  if(!started||uiLock||shooter.active) return;
+  if(photoMode){exitPhoto();return;}
+  photoMode=true;flight.vel=0;accelHeld=false;joyReset();autopilot=-1;
+  document.body.classList.add('photo');$('photoHint').classList.remove('hidden');tone(920,0,.1);
+  setTimeout(()=>window.addEventListener('pointerdown',exitPhoto,{once:true}),400);
+};
 $('badgesBtn').onclick=()=>{
   const g=$('badgeGrid');g.innerHTML='';
   STOPS.forEach(d=>{
@@ -1665,6 +1764,8 @@ function animate(){
     if(keys['arrowdown']||keys['s'])jy=1,steering=true;
     /* space = continuous thrust while held (outside shooter) */
     if(keys[' ']&&!shooter.active)accelHeld=true;
+    /* photo mode: freeze input for a clean shot */
+    if(photoMode){steering=false;accelHeld=false;jx=0;jy=0;autopilot=-1;}
 
     if(autopilot>=0&&!steering){
       const target=autopilot===99?pluto:stopObjs[autopilot].mesh;
@@ -1732,6 +1833,49 @@ function animate(){
         autopilot=-1;flight.vel=0;
       }
     } else landBtn.classList.add('hidden');
+
+    /* schedule the comet chase during free flight */
+    if(!chaseComet.active&&!shooter.active&&!photoMode){
+      if(chaseComet.next===0) chaseComet.next=t+(S.calm?45:28);
+      else if(t>=chaseComet.next) spawnCometChase(t);
+    }
+  }
+
+  /* ☄️ comet chase update — runs whenever active so it always resolves */
+  if(chaseComet.active){
+    chaseComet.t+=dt;
+    const f=Math.min(1,chaseComet.t/chaseComet.life);
+    cometHead.position.lerpVectors(chaseComet.from,chaseComet.to,f);
+    cometGlow.position.copy(cometHead.position);
+    cometTail.position.copy(cometHead.position).addScaledVector(chaseComet.mdir,-13);
+    cometHead.rotation.y+=dt*1.6;
+    const gp=1+Math.sin(t*7)*.12;cometGlow.scale.set(12*gp,12*gp,1);
+    const hudOn=started&&!uiLock&&!shooter.active;
+    $('cometHud').classList.toggle('hidden',!hudOn);
+    if(hudOn){
+      const left=Math.max(0,Math.ceil(chaseComet.life-chaseComet.t));
+      $('cometHud').textContent='☄️ Catch the comet!  '+left+'s';
+      /* off-screen arrow that points to the comet */
+      const ar=$('cometArrow');
+      camera.getWorldDirection(tmpV2);
+      tmpV.copy(cometHead.position);
+      _crel.copy(cometHead.position).sub(camera.position);
+      const behind=_crel.dot(tmpV2)<0;
+      tmpV.project(camera);
+      const onScreen=!behind&&Math.abs(tmpV.x)<.82&&Math.abs(tmpV.y)<.82;
+      if(onScreen){ar.style.opacity=0;}
+      else{
+        let sx=tmpV.x,sy=tmpV.y;if(behind){sx=-sx;sy=-sy;}
+        const ang=Math.atan2(sy,sx),r=Math.min(innerWidth,innerHeight)*.34;
+        ar.style.left=(innerWidth/2+Math.cos(ang)*r)+'px';
+        ar.style.top=(innerHeight/2-Math.sin(ang)*r)+'px';
+        ar.style.transform='translate(-50%,-50%) rotate('+(-ang)+'rad)';
+        ar.style.opacity=1;
+      }
+    } else { $('cometArrow').style.opacity=0; }
+    if(!chaseComet.caught&&started&&!uiLock&&!shooter.active&&
+       cometHead.position.distanceTo(shipRoot.position)<17){ catchComet(); }
+    else if(chaseComet.t>=chaseComet.life){ despawnComet(S.calm?95:65); }
   }
 
   /* sparkle coins */
@@ -1790,6 +1934,9 @@ function animate(){
     tmpV2.copy(shipRoot.position).add(fwd.clone().multiplyScalar(12));
     curLook.lerp(tmpV2,1-Math.pow(.0005,dt));
     camera.lookAt(curLook);
+    /* sense of speed: widen the lens a touch at full throttle (off in calm/reduce-motion) */
+    const fovT=60+((S.calm||S.rm)?0:Math.min(1,flight.vel/flight.maxV)*9);
+    if(Math.abs(camera.fov-fovT)>.05){camera.fov+=(fovT-camera.fov)*Math.min(1,dt*3);camera.updateProjectionMatrix();}
   } else {
     camera.position.lerp(new THREE.Vector3(0,60,240),1-Math.pow(.2,dt));
     curLook.lerp(new THREE.Vector3(0,0,0),1-Math.pow(.2,dt));

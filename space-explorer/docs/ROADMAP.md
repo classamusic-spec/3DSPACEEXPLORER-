@@ -6,8 +6,10 @@
    `missionProgress` in the save. Highest-impact next feature.
 2. ~~Sparkle Shop~~ — DONE (🛍️ HUD) — spend ✨ on ship paint colors, flame styles, a pet alien co-pilot
    riding the dome. Persist `owned` + `equipped`. Gives sparkles a long-term sink.
-3. **Comet chase event** — a comet randomly streaks across space; catch it within 60s
-   for a bonus star shower.
+3. ~~Comet chase event~~ — DONE (☄️) — a bright comet streaks past during free flight; its path
+   sweeps near the ship so it's always catchable. A pulsing HUD banner counts down and an
+   off-screen arrow points to it; intercept it in time for a star shower (+2 ⭐, +5 ✨).
+   Calm Mode softens the announce and widens the window; auto-spawns on a cooldown.
 
 ## Curriculum
 4. ~~2nd/3rd Grade tiers~~ — DONE (grades 1–4 in `S.grade`). Next: telling time,
@@ -22,8 +24,13 @@
 7. ~~Parent dashboard~~ — DONE (settings → Progress Report). Next: time-played tracking (⚙️ sub-screen): per-subject correct counts, time played.
    Add per-subject counters to the save format.
 8. Volume slider + separate music/effects toggles.
-9. Photo-mode button that hides the HUD for planet close-ups.
+9. ~~Photo-mode button~~ — DONE (📷 HUD) — hides all HUD/controls/labels for a clean planet
+   close-up; freezes flight; tap anywhere to return.
 10. Two-player co-pilot mode: alternate questions, shared stars.
+
+### Feel polish (shipped alongside the above)
+- Soft **atmosphere halos** (additive backlit rim glow) on every planet for depth.
+- **Sense-of-speed** camera: the lens widens a touch at full throttle (off in Calm/Reduce-Motion).
 
 ## Engineering
 - Consider splitting blocks into `src/*.js` with a tiny build script ONLY if single-file

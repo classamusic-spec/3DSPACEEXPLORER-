@@ -139,6 +139,14 @@ which also invalidates old `won` saves gracefully (they just have more to do).
   tap targets. Keep `pointer-events` toggling intact (hidden when behind camera).
 - The joystick uses pointer capture on `#joyZone`; touching it cancels autopilot on purpose.
 - Sparkle coins convert 5 ✨ → 1 ⭐ in `collectCoin()`; coin positions are session-random.
+- **Comet Chase** (☄️) lives in the main animate loop: `spawnCometChase`/`catchComet`/`despawnComet`
+  + `chaseComet` state (near `explodeAt`). It only *spawns* during free flight (`!uiLock&&!shooter.active&&!photoMode`)
+  but *updates* whenever `chaseComet.active` so it always resolves. `catchComet` awards +2 ⭐/+5 ✨ and
+  calls `starShower`. No save-format change — rewards go through existing counters.
+- **Photo Mode** (📷): `photoMode` flag (declared by `flight`) + `body.photo` CSS hides all chrome;
+  flight input is frozen in the loop's flight block. `exitPhoto` is a one-shot `pointerdown` listener.
+- Planet **atmosphere halos** are additive glow sprites parented to each planet mesh (tints in `ATMO`);
+  the **speed FOV** push is in the chase-camera block and is disabled under Calm/Reduce-Motion.
 
 ## Roadmap
 
