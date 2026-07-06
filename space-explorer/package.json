@@ -1,0 +1,11 @@
+{
+  "name": "little-space-explorer",
+  "version": "1.0.0",
+  "description": "3D solar-system flight + learning game for K–1st grade (Three.js, single file)",
+  "type": "module",
+  "scripts": {
+    "start": "npx -y serve -l 3000 .",
+    "test": "node tests/validate-content.mjs"
+  },
+  "license": "MIT"
+}
