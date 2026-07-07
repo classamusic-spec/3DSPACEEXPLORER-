@@ -155,6 +155,11 @@ which also invalidates old `won` saves gracefully (they just have more to do).
   flight input is frozen in the loop's flight block. `exitPhoto` is a one-shot `pointerdown` listener.
 - Planet **atmosphere halos** are additive glow sprites parented to each planet mesh (tints in `ATMO`);
   the **speed FOV** push is in the chase-camera block and is disabled under Calm/Reduce-Motion.
+- **Ship models** (`buildRocket`/`buildSaucer`) keep `shipPaintMats[0]` as the shop-repaintable
+  paint material (do not overwrite its `userData.def`) and use named child meshes the loop drives:
+  `flame` (thrust cone) and `engine` (emissive core state cue). `trimMat()` = shared dark metal.
+- **Camera impulse**: `kick(amount)` adds a clamped, decaying `camShake` (no-op in Calm/Reduce-Motion),
+  fired on comet catch / coin pickup. **`renderDiag()`** returns last-frame renderer.info counts for profiling.
 
 ## Roadmap
 
