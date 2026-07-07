@@ -233,7 +233,7 @@ for (const g of [2, 3, 4]) {
     return 0;
   };
   for (const [name,pool] of [['PHONICS',PHONICS],['SCIENCE',SCIENCE],['TRUEFALSE',TRUEFALSE],
-    ['HISTORY',HISTORY],['FEELINGS',FEELINGS],['SENTENCES',SENTENCES],['USCIVICS',USCIVICS]]) {
+    ['HISTORY',HISTORY],['FEELINGS',FEELINGS],['SENTENCES',SENTENCES],['USCIVICS',USCIVICS],['STORIES',STORIES]]) {
     const thin = bands(pool);
     if (thin) throw name + ' too thin at grade band ' + thin + ' (<9 items = repeats within 3 visits)';
   }

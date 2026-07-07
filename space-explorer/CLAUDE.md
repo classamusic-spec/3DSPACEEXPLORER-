@@ -164,7 +164,14 @@ which also invalidates old `won` saves gracefully (they just have more to do).
   land on it — the `R<22` clamp pushes you away). Flying to `R<52` shows `#sunBtn`; `openSunGame` runs a
   5-question `SUN_QUIZ` (sun-science, grade-filtered by `q.g`), each correct answer calls `launchFlare()`
   and fills the meter, finish awards via `rewardStar()`. `sunLockUntil` prevents immediate re-prompting.
-  Because it's not a stop, it does not touch the badge count or win condition.
+  Because it's not a stop, it does not touch the badge count or win condition. Its reward loop calls
+  `missionBump('sparks')`+`saveP()` per correct answer (like every reward path must).
+- **`menuOpen()`** returns true when any `.screen` overlay (except `#startScreen`) is up; `animate` computes
+  `menuUp` once/frame and gates the flight sim, coin pickup, and comet spawn/catch on it — so ambient
+  events don't fire (or speak) behind an open menu. Info overlays (settings/shop/missions/…) don't set `uiLock`.
+- **Answer feedback is dual-channel**: `.ansBtn.right/.wrong` (and `.sunOpt`) carry a persistent CSS `::after`
+  badge (✓ / ↻) so correct-vs-wrong reads by *shape*, not just green/red or animation — required because
+  Reduce Motion (and `@media (prefers-reduced-motion)`) disables the pop/wiggle. Keep the glyphs.
 
 ## Roadmap
 

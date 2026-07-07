@@ -145,6 +145,8 @@
   .sunOpt:active { transform:scale(.97); }
   .sunOpt.right { border-color:#7CF29C; background:rgba(124,242,156,.18); }
   .sunOpt.wrong { border-color:#FF6B6B; animation:wiggle .4s; }
+  .sunOpt.right::after { content:'✓'; margin-left:auto; color:#7CF29C; font-size:26px; font-weight:900; }
+  .sunOpt.wrong::after { content:'↻'; margin-left:auto; color:#FF6B6B; font-size:26px; font-weight:900; }
   @keyframes wiggle { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-8px);}
     75%{transform:translateX(8px);} }
 
@@ -206,6 +208,7 @@
   #cardQbig { font-size:34px; margin-bottom:10px; line-height:1.3; letter-spacing:4px; word-break:break-all; }
   .answers { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
   .ansBtn {
+    position:relative;
     font-size:36px; padding:12px 16px; min-width:88px; cursor:pointer;
     background:rgba(255,255,255,.1); border:3px solid rgba(255,255,255,.35); border-radius:20px;
     color:#fff; transition:transform .12s;
@@ -215,6 +218,14 @@
   .ansBtn:active { transform:scale(.93); }
   .ansBtn.right { background:rgba(124,242,156,.3); border-color:#7CF29C; animation:pop .4s; }
   .ansBtn.wrong { animation:wiggle .45s; border-color:#FF6B6B; }
+  /* persistent shape badge — conveys right/wrong without relying on color or motion
+     (works for colorblind kids and when reduce-motion disables the animations) */
+  .ansBtn.right::after, .ansBtn.wrong::after {
+    position:absolute; top:-9px; right:-9px; width:28px; height:28px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900;
+    box-shadow:0 2px 8px rgba(0,0,0,.45); }
+  .ansBtn.right::after { content:'✓'; background:#7CF29C; color:#06210f; }
+  .ansBtn.wrong::after { content:'↻'; background:#FF6B6B; color:#2a0606; }
   @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.25)} 100%{transform:scale(1)} }
   @keyframes wiggle { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
   #speakBtn { position:absolute; top:12px; right:12px; font-size:22px; background:rgba(255,255,255,.12);
@@ -1160,6 +1171,8 @@ const flight={vel:0,maxV:24};
 let photoMode=false;
 let camShake=0; /* event-driven camera impulse (clamped, reduce-motion aware) */
 function kick(amount){ if(!S.rm&&!S.calm) camShake=Math.min(2.2,camShake+amount); }
+/* true when an info/menu overlay is up — pauses ambient events (comet, coins) behind it */
+function menuOpen(){ for(const el of document.querySelectorAll('.screen:not(.hidden)')){ if(el.id!=='startScreen') return true; } return false; }
 let accelHeld=false,autopilot=-1,uiLock=true,started=false;
 const joy={x:0,y:0,active:false};
 
@@ -1889,8 +1902,9 @@ function animate(){
   plutoGroup.userData.angle+=dt*.002;plutoGroup.rotation.y=plutoGroup.userData.angle;
   pluto.rotation.y+=dt*.3;
 
+  const menuUp=started&&menuOpen();
   /* ---- flight ---- */
-  if(started&&!uiLock){
+  if(started&&!uiLock&&!menuUp){
     let steering=joy.active;
     let jx=joy.x,jy=joy.y;
     if(keys['arrowleft']||keys['a'])jx=-1,steering=true;
@@ -2017,7 +2031,7 @@ function animate(){
         ar.style.opacity=1;
       }
     } else { $('cometArrow').style.opacity=0; }
-    if(!chaseComet.caught&&started&&!uiLock&&!shooter.active&&
+    if(!chaseComet.caught&&started&&!uiLock&&!shooter.active&&!photoMode&&!menuUp&&
        cometHead.position.distanceTo(shipRoot.position)<17){ catchComet(); }
     else if(chaseComet.t>=chaseComet.life){ despawnComet(S.calm?95:65); }
   }
@@ -2027,7 +2041,7 @@ function animate(){
     if(c.taken) return;
     c.m.rotation.y+=dt*2.2;
     c.m.position.y=c.base+Math.sin(t*2+c.ph)*.9;
-    if(started&&!uiLock&&c.m.position.distanceTo(shipRoot.position)<5.5) collectCoin(c);
+    if(started&&!uiLock&&!menuUp&&c.m.position.distanceTo(shipRoot.position)<5.5) collectCoin(c);
   });
 
   /* shooter rocks */
@@ -3443,6 +3457,14 @@ $('gSpan').onclick=()=>{ $('arcade').classList.add('hidden');
    23. CONTENT PACK: stories, shapes, time & money
 ===================================================== */
 const STORIES=[
+  {t:'The Moon Nap',s:'Luna the cat flew to the moon. She was sleepy, so she took a nap on a soft crater.',
+   q:'Where did Luna nap?',o:[O('🌙','On the moon',1),O('🚀','In a rocket'),O('🌊','In the sea')]},
+  {t:'Star Soup',s:'Pip the robot made soup from twinkly stars. It tasted warm and sweet!',
+   q:'What did Pip make?',o:[O('🍲','Star soup',1),O('🍕','Pizza'),O('🧁','A cupcake')]},
+  {t:'Two Suns',s:'On a far away planet, Bo saw two suns in the sky. He waved hello to both of them!',
+   q:'How many suns did Bo see?',o:[O('✌️','Two',1),O('🖐️','Five'),O('🔟','Ten')]},
+  {t:'The Lost Star',s:'A little star slipped behind a cloud. The kind moon helped it find the way back home.',
+   q:'Who helped the little star?',o:[O('🌙','The moon',1),O('🐟','A fish'),O('🚌','A bus')]},
   {t:'Zog’s Ball',s:'Zog the alien lost his red ball. He looked under his saucer. There it was!',
    q:'Where was the ball?',o:[O('🛸','Under the saucer',1),O('🌳','In a tree'),O('🌙','On the moon')]},
   {t:'Mia’s Trip',s:'Mia flew to the moon. She ate a snack, and then she waved to Earth.',
@@ -6223,6 +6245,7 @@ function sunAnswer(o,btn){
     btn.classList.add('right');
     launchFlare();tone(760,0,.12,'sine');tone(1040,.09,.14,'sine');tone(1320,.18,.16,'sine');
     S.sparks=(S.sparks||0)+1;$('coinPill').textContent='✨ '+S.sparks;kick(.4);
+    saveP();if(typeof missionBump==='function') missionBump('sparks');
     sunG.i++;
     $('sunMeter').style.width=(sunG.i/sunG.qs.length*100)+'%';
     if(sunG.i>=sunG.qs.length) setTimeout(finishSunGame,750);
@@ -6255,7 +6278,7 @@ function finishSunGame(){
 }
 function closeSunGame(){
   sunG.active=false;$('sunGame').classList.add('hidden');
-  uiLock=false;setControlsVisible(true);
+  saveP();uiLock=false;setControlsVisible(true);
   sunLockUntil=clock.elapsedTime+10; /* don't immediately re-prompt */
 }
 $('sunBtn').onclick=openSunGame;
