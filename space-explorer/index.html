@@ -115,8 +115,38 @@
     background:rgba(7,11,31,.72); border:2px solid rgba(255,215,94,.55); border-radius:999px;
     color:#FFE9A8; font-size:15px; font-weight:bold; padding:8px 20px; pointer-events:none; }
   body.photo #hud, body.photo #joyZone, body.photo #accelBtn, body.photo #landBtn,
-  body.photo #passport, body.photo #navHint, body.photo #schedule, body.photo #streak,
-  body.photo #cometHud, body.photo #cometArrow, body.photo .plabel { display:none !important; }
+  body.photo #sunBtn, body.photo #passport, body.photo #navHint, body.photo #schedule,
+  body.photo #streak, body.photo #cometHud, body.photo #cometArrow, body.photo .plabel { display:none !important; }
+
+  /* ☀️ Solar Flare Quiz */
+  #sunBtn { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); z-index:30;
+    background:linear-gradient(180deg,#FFF0B0,#FFC42E 60%,#FF8A2E);
+    color:#5a3a00; border:none; border-radius:999px; padding:16px 30px; font-size:20px;
+    font-weight:800; cursor:pointer; box-shadow:0 0 34px rgba(255,180,60,.7);
+    animation:sunPulse 1.1s ease-in-out infinite; }
+  @keyframes sunPulse { 0%,100%{ box-shadow:0 0 24px rgba(255,180,60,.5); }
+    50%{ box-shadow:0 0 42px rgba(255,200,90,.9); } }
+  #sunGame { gap:14px; }
+  #sunGame h1 { color:#FFD75E; }
+  #sunSub { max-width:440px; font-size:15px; }
+  #sunMeterWrap { width:min(440px,86vw); height:18px; border-radius:999px;
+    background:rgba(255,255,255,.12); overflow:hidden; border:2px solid rgba(255,215,94,.4); }
+  #sunMeter { height:100%; width:0%; border-radius:999px;
+    background:linear-gradient(90deg,#FF8A2E,#FFC42E 60%,#FFF0B0);
+    box-shadow:0 0 16px rgba(255,190,70,.8); transition:width .5s cubic-bezier(.2,.9,.3,1.2); }
+  #sunQ { font-size:22px; font-weight:800; color:#fff; max-width:min(560px,90vw);
+    line-height:1.35; margin-top:4px; }
+  #sunOpts { display:flex; flex-direction:column; gap:12px; width:min(440px,88vw); }
+  .sunOpt { display:flex; align-items:center; gap:14px; padding:14px 18px; font-size:20px;
+    font-weight:700; color:#fff; cursor:pointer; text-align:left;
+    background:rgba(255,255,255,.06); border:2px solid rgba(255,215,94,.35); border-radius:20px;
+    transition:transform .12s, border-color .12s, background .12s; }
+  .sunOpt .e { font-size:30px; min-width:34px; text-align:center; }
+  .sunOpt:active { transform:scale(.97); }
+  .sunOpt.right { border-color:#7CF29C; background:rgba(124,242,156,.18); }
+  .sunOpt.wrong { border-color:#FF6B6B; animation:wiggle .4s; }
+  @keyframes wiggle { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-8px);}
+    75%{transform:translateX(8px);} }
 
   #streak { position:fixed; top:14%; right:12px; z-index:22; font-size:22px; font-weight:bold;
     color:#FF9B4A; text-shadow:0 0 14px rgba(255,155,74,.7); pointer-events:none;
@@ -282,6 +312,17 @@
 <div id="joyZone" class="hidden"><div id="joyKnob">🕹️</div></div>
 <button id="accelBtn" class="hidden">GO!<span class="sub">hold to fly</span></button>
 <button id="landBtn" class="bigBtn hidden">🛬 Land!</button>
+<button id="sunBtn" class="bigBtn hidden">☀️ Play at the Sun!</button>
+
+<!-- Solar Flare Quiz (triggered by flying near the Sun) -->
+<div id="sunGame" class="screen hidden">
+  <h1>☀️ Solar Flare Quiz</h1>
+  <p id="sunSub">Answer about the Sun to launch bright flares and light it up!</p>
+  <div id="sunMeterWrap"><div id="sunMeter"></div></div>
+  <div id="sunQ"></div>
+  <div id="sunOpts"></div>
+  <button class="ghostBtn" id="sunClose">Fly away 🚀</button>
+</div>
 
 <!-- Shooter -->
 <div id="shooterHud" class="hidden">
@@ -1745,7 +1786,8 @@ $('startBtn').onclick=()=>{
 
 /* landing */
 const landBtn=$('landBtn');
-let nearIdx=-1,nearPluto=false;
+const sunBtn=$('sunBtn');
+let nearIdx=-1,nearPluto=false,sunLockUntil=0;
 landBtn.onclick=()=>{
   if(nearPluto){openPluto();return;}
   if(nearIdx>=0) openStation(nearIdx);
@@ -1926,6 +1968,15 @@ function animate(){
         autopilot=-1;flight.vel=0;
       }
     } else landBtn.classList.add('hidden');
+
+    /* ☀️ Sun proximity — offer the Solar Flare Quiz (you can't LAND on the Sun) */
+    if(nearIdx<0&&!nearPluto&&!shooter.active&&R<52&&t>sunLockUntil){
+      if(sunBtn.classList.contains('hidden')){
+        sunBtn.classList.remove('hidden');tone(1240,0,.12,'sine');
+        speak('The Sun is glowing! Tap the sun button to play the Solar Flare game!');
+        if(autopilot>=0){autopilot=-1;flight.vel=0;}
+      }
+    } else sunBtn.classList.add('hidden');
 
     /* schedule the comet chase during free flight */
     if(!chaseComet.active&&!shooter.active&&!photoMode){
@@ -6099,6 +6150,116 @@ renderer.domElement.addEventListener('pointerup',e=>{
   const d=STOPS[idx];
   speak('Autopilot engaged! Flying to '+d.name+'!');
 });
+</script>
+<script>
+/* =====================================================
+   50. ☀️ SOLAR FLARE QUIZ — the Sun as a learning game
+   Fly near the Sun → answer sun-science questions → each correct answer
+   launches a real solar flare and fills the "brighten the Sun" meter.
+===================================================== */
+const SUN_QUIZ=[
+  {q:'What does the Sun give us?',say:'What does the Sun give us?',
+    o:[O('☀️','Light and heat',1),O('🍦','Ice cream'),O('❄️','Snow')]},
+  {q:'The Sun is a giant…',say:'The Sun is a giant what?',
+    o:[O('⭐','Star',1),O('🪨','Rock'),O('☁️','Cloud')]},
+  {q:'What do plants need from the Sun to grow?',say:'What do plants need from the Sun to grow?',
+    o:[O('🌻','Sunlight',1),O('🍕','Pizza'),O('🧦','Socks')]},
+  {q:'When can we see the Sun?',say:'When can we see the Sun?',
+    o:[O('🌤️','In the daytime',1),O('🌙','At midnight'),O('🌧️','Never')]},
+  {q:'The Sun is very…',say:'The Sun is very what?',
+    o:[O('🔥','Hot',1),O('🧊','Icy cold'),O('💧','Wet')]},
+  {q:'What travels around the Sun?',say:'What travels around the Sun?',
+    o:[O('🪐','The planets',1),O('🏠','Houses'),O('🐟','Fish')]},
+  {q:'On a bright sunny day you should wear…',say:'On a bright sunny day you should wear?',
+    o:[O('🧴','Sunscreen and a hat',1),O('🧤','Winter mittens'),O('🎿','Ski boots')]},
+  {q:'What color does the Sun look?',say:'What color does the Sun look?',
+    o:[O('🟡','Yellow',1),O('🟣','Purple'),O('🟢','Green')]},
+  {q:'The Sun is the center of our…',say:'The Sun is the center of our what?',g:3,
+    o:[O('🌌','Solar System',1),O('🏫','School'),O('🚌','Bus')]},
+  {q:'When Earth spins, it makes…',say:'When Earth spins, it makes what?',g:3,
+    o:[O('🌗','Day and night',1),O('🍔','Lunch'),O('📚','Homework')]},
+  {q:'Which planet is closest to the Sun?',say:'Which planet is closest to the Sun?',g:3,
+    o:[O('🟤','Mercury',1),O('🌍','Earth'),O('🪐','Saturn')]},
+  {q:'The Sun is a huge ball of hot glowing…',say:'The Sun is a huge ball of hot glowing gas.',g:4,
+    o:[O('💨','Gas',1),O('🧱','Bricks'),O('🍫','Chocolate')]},
+  {q:'About how long does sunlight take to reach Earth?',say:'About how long does sunlight take to reach Earth?',g:5,
+    o:[O('⏱️','8 minutes',1),O('⚡','1 second'),O('📅','1 whole year')]},
+  {q:'Plants use sunlight to make their food. This is called…',say:'Plants use sunlight to make their food. What is it called?',g:5,
+    o:[O('🌱','Photosynthesis',1),O('🍳','Cooking'),O('🧹','Cleaning')]},
+];
+
+let sunG={qs:[],i:0,active:false};
+function openSunGame(){
+  if(!started||uiLock||shooter.active) return;
+  uiLock=true;setControlsVisible(false);
+  landBtn.classList.add('hidden');sunBtn.classList.add('hidden');
+  flight.vel=0;accelHeld=false;joyReset();autopilot=-1;
+  const pool=SUN_QUIZ.filter(q=>!q.g||S.grade>=q.g);
+  sunG={qs:shuffle(pool).slice(0,5),i:0,active:true};
+  $('sunGame').classList.remove('hidden');
+  if(typeof missionBump==='function') missionBump('arcade');
+  speak(S.calm?'Solar Flare game. Answer about the Sun to make flares.'
+             :'Solar Flare game! Answer about the Sun to launch bright flares and light it up!');
+  sunRenderQ();
+}
+function sunRenderQ(){
+  if(!sunG.active) return;
+  const q=sunG.qs[sunG.i];
+  $('sunMeter').style.width=(sunG.i/sunG.qs.length*100)+'%';
+  $('sunQ').textContent=q.q;
+  const opts=$('sunOpts');opts.innerHTML='';
+  shuffle(q.o).forEach(o=>{
+    const b=document.createElement('button');b.className='sunOpt';
+    b.innerHTML='<span class="e">'+(o.e||'⭐')+'</span><span>'+o.t+'</span>';
+    b.onclick=()=>sunAnswer(o,b);
+    opts.appendChild(b);
+  });
+  speak(q.say||q.q);
+}
+function sunAnswer(o,btn){
+  if(!sunG.active) return;
+  if(o.ok){
+    [...document.querySelectorAll('.sunOpt')].forEach(b=>b.style.pointerEvents='none');
+    btn.classList.add('right');
+    launchFlare();tone(760,0,.12,'sine');tone(1040,.09,.14,'sine');tone(1320,.18,.16,'sine');
+    S.sparks=(S.sparks||0)+1;$('coinPill').textContent='✨ '+S.sparks;kick(.4);
+    sunG.i++;
+    $('sunMeter').style.width=(sunG.i/sunG.qs.length*100)+'%';
+    if(sunG.i>=sunG.qs.length) setTimeout(finishSunGame,750);
+    else setTimeout(sunRenderQ,S.calm?1300:850);
+  } else {
+    if(typeof sndWrong==='function') sndWrong();
+    btn.classList.add('wrong');
+    speak(S.calm?'Try another one.':'Good try! The Sun wants a different answer.');
+    setTimeout(()=>btn.classList.remove('wrong'),520);
+  }
+}
+/* a bright solar flare bursts outward from the Sun surface */
+function launchFlare(){
+  const dir=new THREE.Vector3(Math.random()-.5,(Math.random()-.5)*.7,Math.random()-.5).normalize();
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:starTex,transparent:true,
+    depthWrite:false,blending:THREE.AdditiveBlending}));
+  sp.position.copy(dir.multiplyScalar(15));sp.scale.set(4,4,1);
+  scene.add(sp);booms.push({sp,t:0});
+  sunHalo.material.opacity=Math.min(1,sunHalo.material.opacity+.28);
+}
+function finishSunGame(){
+  $('sunMeter').style.width='100%';
+  for(let k=0;k<8;k++) setTimeout(launchFlare,k*70);
+  if(typeof rewardStar==='function') rewardStar();      /* +1 ⭐, streak, confetti, sound */
+  S.sparks=(S.sparks||0)+3;refreshHUD();saveP();
+  if(typeof showToast==='function') showToast('☀️ Solar Scientist! +1 ⭐ +3 ✨');
+  speak(S.calm?'You brightened the Sun. Great job, Solar Scientist.'
+             :'You lit up the whole Sun! You are a Solar Scientist! Bright flares for you!');
+  setTimeout(closeSunGame,S.calm?2800:2000);
+}
+function closeSunGame(){
+  sunG.active=false;$('sunGame').classList.add('hidden');
+  uiLock=false;setControlsVisible(true);
+  sunLockUntil=clock.elapsedTime+10; /* don't immediately re-prompt */
+}
+$('sunBtn').onclick=openSunGame;
+$('sunClose').onclick=()=>{ if(sunG.active) speak('Bye Sun!'); closeSunGame(); };
 </script>
 </body>
 </html>

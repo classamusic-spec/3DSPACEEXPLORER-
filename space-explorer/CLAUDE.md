@@ -160,6 +160,11 @@ which also invalidates old `won` saves gracefully (they just have more to do).
   `flame` (thrust cone) and `engine` (emissive core state cue). `trimMat()` = shared dark metal.
 - **Camera impulse**: `kick(amount)` adds a clamped, decaying `camShake` (no-op in Calm/Reduce-Motion),
   fired on comet catch / coin pickup. **`renderDiag()`** returns last-frame renderer.info counts for profiling.
+- **☀️ Solar Flare Quiz** (block 50): the Sun is a *proximity mini-game*, NOT a STOPS station (you can't
+  land on it — the `R<22` clamp pushes you away). Flying to `R<52` shows `#sunBtn`; `openSunGame` runs a
+  5-question `SUN_QUIZ` (sun-science, grade-filtered by `q.g`), each correct answer calls `launchFlare()`
+  and fills the meter, finish awards via `rewardStar()`. `sunLockUntil` prevents immediate re-prompting.
+  Because it's not a stop, it does not touch the badge count or win condition.
 
 ## Roadmap
 
