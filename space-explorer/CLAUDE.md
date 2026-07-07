@@ -102,7 +102,15 @@ which also invalidates old `won` saves gracefully (they just have more to do).
   fallback stack.
 
 - **Three.js r128 from cdnjs only.** No OrbitControls, no CapsuleGeometry, no npm three.
-  Camera control is hand-rolled (chase cam in section 11).
+  Camera control is hand-rolled (chase cam in section 11). Post-processing is deliberately
+  avoided (would need extra CDN example files that may be blocked in artifacts) — glow/bloom
+  is faked with additive sprites.
+- **Filmic color pipeline (section 4).** The renderer uses `ACESFilmicToneMapping` +
+  `outputEncoding=sRGBEncoding` (exposure ~1.18), and a procedural PMREM env map
+  (`scene.environment`) gives StandardMaterials real reflections. Consequence: **every new
+  canvas *color* texture must set `.encoding=THREE.sRGBEncoding`** (see `glowTexture`/
+  `planetTexture`/`sunTexture`) or it renders washed-out; add `.anisotropy=MAXANISO` for
+  detail maps. Round soft particles use the shared `DOT_TEX` (kills blocky square Points).
 - **Never call `localStorage` directly** in game code — go through `window.storage`
   (the shim handles environment differences). On claude.ai, direct localStorage throws.
 - **Audience UX rules**: every question must have a `say`/spoken form (players can't read);

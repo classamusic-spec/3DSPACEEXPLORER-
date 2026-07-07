@@ -14,6 +14,14 @@
   html,body { width:100%; height:100%; overflow:hidden; background:#070B1F;
     font-family:'Comic Sans MS','Chalkboard SE','Comic Neue',cursive,sans-serif; }
   #scene { position:fixed; inset:0; }
+  /* cinematic vignette + subtle warm/cool grade over the 3D canvas */
+  #vignette { position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:
+      radial-gradient(120% 100% at 50% 42%, rgba(0,0,0,0) 55%, rgba(3,5,16,.55) 100%),
+      radial-gradient(90% 70% at 50% 120%, rgba(20,10,40,.35), rgba(0,0,0,0) 60%);
+    transition:opacity .4s ease; }
+  body.calm #vignette { opacity:.45; }
+  body.photo #vignette { opacity:.85; }
   .hidden { display:none !important; }
   button { font-family:inherit; }
 
@@ -244,6 +252,7 @@
 </head>
 <body>
 <canvas id="scene"></canvas>
+<div id="vignette"></div>
 
 <!-- HUD -->
 <div id="hud" class="hidden">
@@ -772,13 +781,46 @@ async function loadP(){
 const canvas=$('scene');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+/* filmic color pipeline — richer contrast + correct sRGB output */
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.18;
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,3000);
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
 addEventListener('resize',resize);resize();
 
-scene.add(new THREE.AmbientLight(0x3a4a70,1.0));
-scene.add(new THREE.PointLight(0xfff2cc,1.5,1200));
+/* soft round particle sprite — replaces blocky square Points */
+function dotTexture(){
+  const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+  const g=x.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.4,'rgba(255,255,255,.75)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=g;x.beginPath();x.arc(32,32,32,0,7);x.fill();
+  return new THREE.CanvasTexture(c);
+}
+const DOT_TEX=dotTexture();
+
+/* image-based lighting — a procedural space env gives metals real reflections */
+function envEquirect(){
+  const c=document.createElement('canvas');c.width=512;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'#0b1030');g.addColorStop(.5,'#161d40');g.addColorStop(1,'#05070f');
+  x.fillStyle=g;x.fillRect(0,0,512,256);
+  const sg=x.createRadialGradient(150,88,4,150,88,110);
+  sg.addColorStop(0,'#fff4d6');sg.addColorStop(.35,'rgba(255,205,130,.55)');sg.addColorStop(1,'rgba(0,0,0,0)');
+  x.fillStyle=sg;x.fillRect(0,0,512,256);
+  for(let i=0;i<160;i++){x.fillStyle='rgba(200,220,255,'+(.25+Math.random()*.55)+')';
+    x.fillRect(Math.random()*512,Math.random()*256,1.4,1.4);}
+  const t=new THREE.CanvasTexture(c);t.mapping=THREE.EquirectangularReflectionMapping;return t;
+}
+const pmrem=new THREE.PMREMGenerator(renderer);pmrem.compileEquirectangularShader();
+scene.environment=pmrem.fromEquirectangular(envEquirect()).texture;
+
+/* lighting: env IBL carries ambient; key sun light + hemisphere fill add shape */
+scene.add(new THREE.AmbientLight(0x2b3860,.55));
+scene.add(new THREE.HemisphereLight(0x9fb4ff,0x241830,.35));
+const sunLight=new THREE.PointLight(0xfff2cc,1.9,1400,1.4);scene.add(sunLight);
 
 /* starfield */
 (function(){
@@ -792,7 +834,9 @@ scene.add(new THREE.PointLight(0xfff2cc,1.5,1200));
   }
   g.setAttribute('position',new THREE.BufferAttribute(pos,3));
   g.setAttribute('color',new THREE.BufferAttribute(col,3));
-  scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:2.2,vertexColors:true})));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:5.5,vertexColors:true,
+    map:DOT_TEX,alphaTest:.02,transparent:true,depthWrite:false,
+    sizeAttenuation:false,blending:THREE.AdditiveBlending})));
 })();
 
 function glowTexture(c1,c2){
@@ -800,8 +844,9 @@ function glowTexture(c1,c2){
   const x=c.getContext('2d'),g=x.createRadialGradient(128,128,10,128,128,128);
   g.addColorStop(0,c1);g.addColorStop(.5,c2);g.addColorStop(1,'rgba(0,0,0,0)');
   x.fillStyle=g;x.fillRect(0,0,256,256);
-  return new THREE.CanvasTexture(c);
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return t;
 }
+const MAXANISO=renderer.capabilities.getMaxAnisotropy();
 const nebulas=[];
 [['rgba(120,80,255,.5)','rgba(60,20,140,.14)',[-600,200,-800],1000],
  ['rgba(255,110,160,.38)','rgba(140,40,90,.1)',[750,-140,-950],900],
@@ -813,19 +858,28 @@ const nebulas=[];
 
 /* Sun */
 function sunTexture(){
-  const c=document.createElement('canvas');c.width=256;c.height=128;const x=c.getContext('2d');
-  const g=x.createLinearGradient(0,0,0,128);
-  g.addColorStop(0,'#FFE9A0');g.addColorStop(.5,'#FFC02E');g.addColorStop(1,'#FF8A2E');
-  x.fillStyle=g;x.fillRect(0,0,256,128);
-  for(let i=0;i<70;i++){x.fillStyle='rgba(255,120,30,'+(Math.random()*.35)+')';
-    x.beginPath();x.arc(Math.random()*256,Math.random()*128,3+Math.random()*10,0,7);x.fill();}
-  return new THREE.CanvasTexture(c);
+  const c=document.createElement('canvas');c.width=512;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'#FFF6D8');g.addColorStop(.5,'#FFCC3E');g.addColorStop(1,'#FF8A2E');
+  x.fillStyle=g;x.fillRect(0,0,512,256);
+  /* granulation + brighter flare cells for surface life */
+  for(let i=0;i<150;i++){x.fillStyle='rgba(255,120,30,'+(Math.random()*.3)+')';
+    x.beginPath();x.arc(Math.random()*512,Math.random()*256,4+Math.random()*16,0,7);x.fill();}
+  for(let i=0;i<60;i++){x.fillStyle='rgba(255,248,210,'+(.15+Math.random()*.35)+')';
+    x.beginPath();x.arc(Math.random()*512,Math.random()*256,2+Math.random()*7,0,7);x.fill();}
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return t;
 }
-const sun=new THREE.Mesh(new THREE.SphereGeometry(14,48,48),new THREE.MeshBasicMaterial({map:sunTexture()}));
+const sun=new THREE.Mesh(new THREE.SphereGeometry(14,64,64),new THREE.MeshBasicMaterial({map:sunTexture()}));
 scene.add(sun);
+/* layered additive corona → a soft bloom-like core without post-processing */
 const sunGlow=new THREE.Sprite(new THREE.SpriteMaterial({
-  map:glowTexture('rgba(255,220,120,.9)','rgba(255,140,40,.22)'),transparent:true,depthWrite:false}));
-sunGlow.scale.set(90,90,1);scene.add(sunGlow);
+  map:glowTexture('rgba(255,224,130,.95)','rgba(255,150,50,.22)'),
+  transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+sunGlow.scale.set(64,64,1);scene.add(sunGlow);
+const sunHalo=new THREE.Sprite(new THREE.SpriteMaterial({
+  map:glowTexture('rgba(255,240,190,.5)','rgba(255,170,70,.08)'),
+  transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+sunHalo.scale.set(150,150,1);scene.add(sunHalo);
 
 /* planet textures */
 function planetTexture(spec){
@@ -853,7 +907,8 @@ function planetTexture(spec){
   if(spec.ice){x.fillStyle='rgba(255,255,255,.85)';
     x.beginPath();x.ellipse(256,4,240,18,0,0,7);x.fill();
     x.beginPath();x.ellipse(256,252,240,18,0,0,7);x.fill();}
-  const t=new THREE.CanvasTexture(c);t.wrapS=THREE.RepeatWrapping;return t;
+  const t=new THREE.CanvasTexture(c);t.wrapS=THREE.RepeatWrapping;
+  t.encoding=THREE.sRGBEncoding;t.anisotropy=MAXANISO;return t;
 }
 const TEX={
   mercury:{base:'#9c8f85',craters:60},
@@ -937,7 +992,7 @@ STOPS.forEach((d,idx)=>{
     const rc=document.createElement('canvas');rc.width=256;rc.height=16;const rx=rc.getContext('2d');
     for(let i=0;i<256;i++){rx.fillStyle='rgba('+(210+Math.random()*40|0)+','+(190+Math.random()*40|0)+','+(140+Math.random()*40|0)+','+(Math.random()*.6+.25)+')';
       rx.fillRect(i,0,1,16);}
-    const rt=new THREE.CanvasTexture(rc);
+    const rt=new THREE.CanvasTexture(rc);rt.encoding=THREE.sRGBEncoding;rt.anisotropy=MAXANISO;
     const rg=new THREE.RingGeometry(d.size*1.4,d.size*2.3,96);
     const pos=rg.attributes.position,uv=rg.attributes.uv,v=new THREE.Vector3();
     for(let i=0;i<pos.count;i++){v.fromBufferAttribute(pos,i);
@@ -1037,7 +1092,8 @@ const trailGeo=new THREE.BufferGeometry();
 const trailPos=new Float32Array(TRAIL_N*3);
 trailGeo.setAttribute('position',new THREE.BufferAttribute(trailPos,3));
 const trail=new THREE.Points(trailGeo,new THREE.PointsMaterial({
-  color:0xFFE28A,size:1.4,transparent:true,opacity:.85,depthWrite:false}));
+  color:0xFFC266,size:2.0,map:DOT_TEX,alphaTest:.01,transparent:true,opacity:.6,
+  depthWrite:false,blending:THREE.AdditiveBlending}));
 scene.add(trail);
 let trailIdx=0,trailOn=false;
 function resetTrail(){
@@ -1750,7 +1806,8 @@ function animate(){
     st.mesh.rotation.y+=dt*.3;
   });
   sun.rotation.y+=dt*.05;
-  const pul=1+Math.sin(t*2)*.04;sunGlow.scale.set(90*pul,90*pul,1);
+  const pul=1+Math.sin(t*2)*.04;sunGlow.scale.set(64*pul,64*pul,1);
+  sunHalo.scale.set(150*pul,150*pul,1);
   plutoGroup.userData.angle+=dt*.002;plutoGroup.rotation.y=plutoGroup.userData.angle;
   pluto.rotation.y+=dt*.3;
 
